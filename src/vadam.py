@@ -1,4 +1,5 @@
 import torch
+import math
 from torch.optim import Optimizer
 
 class Vadam(Optimizer):
@@ -26,7 +27,7 @@ class Vadam(Optimizer):
                     continue
                 grad = p.grad.data
                 if grad.is_sparse:
-                    raise RuntimeError('Adam does not support sparse gradients')
+                    raise RuntimeError('Vadam does not support sparse gradients')
 
                 state = self.state[p]
 
@@ -53,12 +54,16 @@ class Vadam(Optimizer):
                 # Update the previous gradient for next step
                 prev_grad.copy_(grad)
 
-                denom = exp_avg_sq.sqrt().add_(group['eps'])
+                # Bias-corrected denominator
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+
+                denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
 
                 # Apply adaptive gradient clipping
                 clipped_grad = torch.clamp(exp_avg, min=-group['adaptive_clip'], max=group['adaptive_clip'])
 
-                step_size = group['lr'] * (1 - beta2 ** state['step']) ** 0.5 / (1 - beta1 ** state['step'])
+                step_size = group['lr'] / bias_correction1
 
                 p.data.addcdiv_(clipped_grad, denom, value=-step_size)
 
